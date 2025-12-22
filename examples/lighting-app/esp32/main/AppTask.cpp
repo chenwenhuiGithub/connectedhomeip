@@ -17,10 +17,9 @@
  */
 
 #include "AppTask.h"
+#include "Button.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-
-#include "DeviceWithDisplay.h"
 
 #include <app-common/zap-generated/attributes/Accessors.h>
 
@@ -32,12 +31,12 @@
 
 using namespace ::chip;
 using namespace ::chip::app;
-using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
 
-static const char TAG[] = "app-task";
+static const char TAG[] = "APPTask";
 
 LEDWidget AppLED;
+Button AppButton;
 
 namespace {
 constexpr EndpointId kLightEndpointId = 1;
@@ -62,73 +61,12 @@ CHIP_ERROR AppTask::StartAppTask()
     return (xReturned == pdPASS) ? CHIP_NO_ERROR : APP_ERROR_CREATE_TASK_FAILED;
 }
 
-void AppTask::ButtonEventHandler(const uint8_t buttonHandle, uint8_t btnAction)
-{
-    if (btnAction != APP_BUTTON_PRESSED)
-    {
-        return;
-    }
-
-    AppEvent button_event = {};
-    button_event.Type     = AppEvent::kEventType_Button;
-
-#if CONFIG_HAVE_DISPLAY
-    button_event.ButtonEvent.PinNo  = buttonHandle;
-    button_event.ButtonEvent.Action = btnAction;
-    button_event.mHandler           = ButtonPressedAction;
-#else
-    button_event.mHandler = AppTask::LightingActionEventHandler;
-#endif
-
-    sAppTask.PostEvent(&button_event);
-}
-
-#if CONFIG_DEVICE_TYPE_M5STACK
-void AppTask::ButtonPressedAction(AppEvent * aEvent)
-{
-    uint32_t io_num = aEvent->ButtonEvent.PinNo;
-    int level       = gpio_get_level((gpio_num_t) io_num);
-    if (level == 0)
-    {
-        bool woken = WakeDisplay();
-        if (woken)
-        {
-            return;
-        }
-        // Button 1 is connected to the pin 39
-        // Button 2 is connected to the pin 38
-        // Button 3 is connected to the pin 37
-        // So we use 40 - io_num to map the pin number to button number
-        ScreenManager::ButtonPressed(40 - io_num);
-    }
-}
-#endif
-
-CHIP_ERROR AppTask::Init()
-{
-    CHIP_ERROR err = CHIP_NO_ERROR;
-
-    AppLED.Init();
-
-#if CONFIG_HAVE_DISPLAY
-    InitDeviceDisplay();
-
-    AppLED.SetVLED(ScreenManager::AddVLED(TFT_YELLOW));
-#endif
-
-    return err;
-}
-
 void AppTask::AppTaskMain(void * pvParameter)
 {
     AppEvent event;
-    CHIP_ERROR err = sAppTask.Init();
-    if (err != CHIP_NO_ERROR)
-    {
-        ESP_LOGI(TAG, "AppTask.Init() failed due to %" CHIP_ERROR_FORMAT, err.Format());
-        return;
-    }
 
+    AppButton.Init();
+    AppLED.Init();
     ESP_LOGI(TAG, "App Task started");
 
     while (true)
@@ -136,49 +74,35 @@ void AppTask::AppTaskMain(void * pvParameter)
         BaseType_t eventReceived = xQueueReceive(sAppEventQueue, &event, pdMS_TO_TICKS(10));
         while (eventReceived == pdTRUE)
         {
-            sAppTask.DispatchEvent(&event);
+            if (event.mHandler)
+            {
+                event.mHandler(&event);
+            }
             eventReceived = xQueueReceive(sAppEventQueue, &event, 0); // return immediately if the queue is empty
         }
     }
 }
 
-void AppTask::PostEvent(const AppEvent * aEvent)
+void AppTask::ButtonEventHandler()
 {
-    if (sAppEventQueue != NULL)
+    AppEvent button_event = {};
+    button_event.Type     = AppEvent::kEventType_Button;
+    button_event.mHandler = AppTask::LightingActionEventHandler;
+    if (xPortInIsrContext())
     {
-        BaseType_t status;
-        if (xPortInIsrContext())
-        {
-            BaseType_t higherPrioTaskWoken = pdFALSE;
-            status                         = xQueueSendFromISR(sAppEventQueue, aEvent, &higherPrioTaskWoken);
-        }
-        else
-        {
-            status = xQueueSend(sAppEventQueue, aEvent, 1);
-        }
-        if (!status)
-            ESP_LOGE(TAG, "Failed to post event to app task event queue");
+        BaseType_t higherPrioTaskWoken = pdFALSE;
+        xQueueSendFromISR(sAppEventQueue, &button_event, &higherPrioTaskWoken);
     }
     else
     {
-        ESP_LOGE(TAG, "Event Queue is NULL should never happen");
-    }
-}
-
-void AppTask::DispatchEvent(AppEvent * aEvent)
-{
-    if (aEvent->mHandler)
-    {
-        aEvent->mHandler(aEvent);
-    }
-    else
-    {
-        ESP_LOGI(TAG, "Event received with no handler. Dropping event.");
+        xQueueSend(sAppEventQueue, &button_event, 1);
     }
 }
 
 void AppTask::LightingActionEventHandler(AppEvent * aEvent)
 {
+    ESP_LOGI(TAG, "button pressed");
+
     AppLED.Toggle();
     chip::DeviceLayer::PlatformMgr().LockChipStack();
     sAppTask.UpdateClusterState();

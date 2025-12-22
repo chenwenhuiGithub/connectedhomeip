@@ -46,6 +46,13 @@ void PrintOnboardingCodes(chip::RendezvousInformationFlags aRendezvousFlags)
         ChipLogError(AppServer, "GetPayloadContents() failed: %" CHIP_ERROR_FORMAT, err.Format());
     }
 
+    ChipLogProgress(AppServer, "Onboarding payload:");
+    ChipLogProgress(AppServer, "vendorID: %d(0x%04X)", payload.vendorID, payload.vendorID);
+    ChipLogProgress(AppServer, "productID: %d(0x%04X)", payload.productID, payload.productID);
+    ChipLogProgress(AppServer, "discriminator: %d(0x%03X)", payload.discriminator.GetLongValue(), payload.discriminator.GetLongValue());
+    ChipLogProgress(AppServer, "setUpPINCode: %lu(0x%08lX)", payload.setUpPINCode, payload.setUpPINCode);
+    ChipLogProgress(AppServer, "customFlow: %d(0-standard,1-user action,2-custom)", (uint8_t)payload.commissioningFlow);
+    // ChipLogProgress(AppServer, "discoveryCap: 0x%X", payload.rendezvousInformation.Value());
     PrintOnboardingCodes(payload);
 }
 

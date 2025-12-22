@@ -44,22 +44,14 @@ class AppTask
 public:
     CHIP_ERROR StartAppTask();
     static void AppTaskMain(void * pvParameter);
-    void PostEvent(const AppEvent * event);
 
-    void ButtonEventHandler(const uint8_t buttonHandle, uint8_t btnAction);
+    void ButtonEventHandler();
 
     void UpdateClusterState();
 
 private:
     friend AppTask & GetAppTask(void);
-    CHIP_ERROR Init();
-    void DispatchEvent(AppEvent * event);
-    static void SwitchActionEventHandler(AppEvent * aEvent);
     static void LightingActionEventHandler(AppEvent * aEvent);
-
-#if CONFIG_DEVICE_TYPE_M5STACK
-    static void ButtonPressedAction(AppEvent * aEvent);
-#endif
 
     static AppTask sAppTask;
 };

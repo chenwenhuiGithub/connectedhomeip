@@ -18,7 +18,6 @@
 #include "AppTask.h"
 
 #include "DeviceCallbacks.h"
-#include "Globals.h"
 #include "LEDWidget.h"
 
 #include <app/util/util.h>
@@ -29,7 +28,7 @@
 #include <app/ConcreteAttributePath.h>
 #include <lib/support/logging/CHIPLogging.h>
 
-static const char TAG[] = "light-app-callbacks";
+static const char TAG[] = "DeviceCallbacks";
 
 extern LEDWidget AppLED;
 
@@ -41,8 +40,8 @@ using namespace chip::app::Clusters;
 void AppDeviceCallbacks::PostAttributeChangeCallback(EndpointId endpointId, ClusterId clusterId, AttributeId attributeId,
                                                      uint8_t type, uint16_t size, uint8_t * value)
 {
-    ESP_LOGI(TAG, "PostAttributeChangeCallback - Cluster ID: '0x%" PRIx32 "', EndPoint ID: '0x%x', Attribute ID: '0x%" PRIx32 "'",
-             clusterId, endpointId, attributeId);
+    ESP_LOGI(TAG, "PostAttributeChangeCallback - EndPoint ID: '0x%x', Cluster ID: '0x%" PRIx32 "', Attribute ID: '0x%" PRIx32 "'",
+             endpointId, clusterId, attributeId);
 
     switch (clusterId)
     {
@@ -54,11 +53,9 @@ void AppDeviceCallbacks::PostAttributeChangeCallback(EndpointId endpointId, Clus
         OnLevelControlAttributeChangeCallback(endpointId, attributeId, value);
         break;
 
-#if CONFIG_LED_TYPE_RMT
     case ColorControl::Id:
         OnColorControlAttributeChangeCallback(endpointId, attributeId, value);
         break;
-#endif
 
     default:
         ESP_LOGI(TAG, "Unhandled cluster ID: %" PRIu32, clusterId);
@@ -74,6 +71,7 @@ void AppDeviceCallbacks::OnOnOffPostAttributeChangeCallback(EndpointId endpointI
                  ESP_LOGI(TAG, "Unhandled Attribute ID: '0x%" PRIx32 "'", attributeId));
     VerifyOrExit(endpointId == 1, ESP_LOGE(TAG, "Unexpected EndPoint ID: `0x%02x'", endpointId));
 
+    ESP_LOGI(TAG, "set onoff:%d", *value);
     AppLED.Set(*value);
 
 exit:
@@ -86,6 +84,7 @@ void AppDeviceCallbacks::OnLevelControlAttributeChangeCallback(EndpointId endpoi
                  ESP_LOGI(TAG, "Unhandled Attribute ID: '0x%" PRIx32 "'", attributeId));
     VerifyOrExit(endpointId == 1, ESP_LOGE(TAG, "Unexpected EndPoint ID: `0x%02x'", endpointId));
 
+    ESP_LOGI(TAG, "set level:%d", *value);
     AppLED.SetBrightness(*value);
 
 exit:
@@ -93,7 +92,6 @@ exit:
 }
 
 // Currently ColorControl cluster is supported for ESP32C3_DEVKITM and ESP32S3_DEVKITM which have an on-board RGB-LED
-#if CONFIG_LED_TYPE_RMT
 void AppDeviceCallbacks::OnColorControlAttributeChangeCallback(EndpointId endpointId, AttributeId attributeId, uint8_t * value)
 {
     using namespace ColorControl::Attributes;
@@ -114,12 +112,12 @@ void AppDeviceCallbacks::OnColorControlAttributeChangeCallback(EndpointId endpoi
         saturation = *value;
         CurrentHue::Get(endpointId, &hue);
     }
+    ESP_LOGI(TAG, "set hue:%d, saturation:%d", hue, saturation);
     AppLED.SetColor(hue, saturation);
 
 exit:
     return;
 }
-#endif // CONFIG_LED_TYPE_RMT
 
 /** @brief OnOff Cluster Init
  *
@@ -143,10 +141,12 @@ void emberAfOnOffClusterInitCallback(EndpointId endpoint)
 
 void AppDeviceCallbacksDelegate::OnIPv4ConnectivityEstablished()
 {
-    wifiLED.Set(true);
+    ESP_LOGI(TAG, "OnIPv4ConnectivityEstablished");
+    // wifiLED.Set(true);
 }
 
 void AppDeviceCallbacksDelegate::OnIPv4ConnectivityLost()
 {
-    wifiLED.Set(false);
+    ESP_LOGI(TAG, "OnIPv4ConnectivityLost");
+    // wifiLED.Set(false);
 }
