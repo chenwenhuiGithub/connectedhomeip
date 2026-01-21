@@ -27,17 +27,43 @@
 #include <vector>
 
 static const char TAG[] = "Button";
-static TickType_t s_last_button_time = 0;
-static const uint32_t DEBOUNCE_DELAY_MS = 50;
 
 Button::Button() {}
 
-void IRAM_ATTR button_isr_handler(void * arg)
+static void btn_task_cb(void *pvParameters)
 {
-    TickType_t now = xTaskGetTickCountFromISR();
-    if ((now - s_last_button_time) > pdMS_TO_TICKS(DEBOUNCE_DELAY_MS)) {
-        s_last_button_time = now;
-        GetAppTask().ButtonEventHandler();
+    uint32_t press_start_time = 0, press_duration = 0;
+    uint8_t btn_pressed = 0, cur_state = 0, last_state = 1;
+    
+    while (1) {
+        cur_state = gpio_get_level((gpio_num_t)CONFIG_BUTTON_GPIO_NUM);
+
+        if (1 == last_state && 0 == cur_state) { // pressed
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DEBOUNCE_MS));
+            if (0 == gpio_get_level((gpio_num_t)CONFIG_BUTTON_GPIO_NUM)) {
+                press_start_time = xTaskGetTickCount();
+                btn_pressed = 1;
+            }
+        }
+
+        if (0 == last_state && 1 == cur_state && btn_pressed) { // released
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DEBOUNCE_MS));
+            if (1 == gpio_get_level((gpio_num_t)CONFIG_BUTTON_GPIO_NUM)) {
+                press_duration = xTaskGetTickCount() - press_start_time;
+                if (press_duration < pdMS_TO_TICKS(CONFIG_LONGPRESS_MS)) {
+                    GetAppTask().HandleBtnPressedEvent();
+                }
+                btn_pressed = 0;
+            }
+        }
+        
+        if (btn_pressed && (xTaskGetTickCount() - press_start_time) >= pdMS_TO_TICKS(CONFIG_LONGPRESS_MS)) { // long pressed
+            GetAppTask().HandleBtnLongPressedEvent();
+            btn_pressed = 0;
+        }
+        
+        last_state = cur_state;
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -45,14 +71,15 @@ esp_err_t Button::Init()
 {
     gpio_config_t io_conf = {};
 
-    io_conf.intr_type = GPIO_INTR_POSEDGE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.pin_bit_mask = 1ULL << CONFIG_BUTTON_GPIO_NUM;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
 
     gpio_config(&io_conf);
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add((gpio_num_t)CONFIG_BUTTON_GPIO_NUM, button_isr_handler, NULL);
+
+    xTaskCreate(btn_task_cb, "btn_task", 2048, NULL, 3, NULL);
 
     return ESP_OK;
 }

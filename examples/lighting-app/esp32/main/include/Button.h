@@ -22,9 +22,10 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/timers.h"
 
-#define CONFIG_BUTTON_GPIO_NUM           5
+#define CONFIG_BUTTON_GPIO_NUM          0
+#define CONFIG_DEBOUNCE_MS              50
+#define CONFIG_LONGPRESS_MS             3000
 
 class Button
 {
@@ -32,6 +33,4 @@ public:
     Button();
 
     esp_err_t Init();
-
-    friend void IRAM_ATTR button_isr_handler(void * arg);
 };

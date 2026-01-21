@@ -26,7 +26,13 @@
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
 #include <app/ConcreteAttributePath.h>
+#include <app/server/Server.h>
 #include <lib/support/logging/CHIPLogging.h>
+
+#include <app/util/attribute-storage.h>
+#include <platform/KeyValueStoreManager.h>
+#include <lib/support/CodeUtils.h>
+#include <platform/CHIPDeviceLayer.h>
 
 static const char TAG[] = "DeviceCallbacks";
 
@@ -35,7 +41,9 @@ extern LEDWidget AppLED;
 using namespace chip;
 using namespace chip::Inet;
 using namespace chip::System;
+using namespace chip::app;
 using namespace chip::app::Clusters;
+using namespace chip::DeviceLayer;
 
 void AppDeviceCallbacks::PostAttributeChangeCallback(EndpointId endpointId, ClusterId clusterId, AttributeId attributeId,
                                                      uint8_t type, uint16_t size, uint8_t * value)
@@ -72,7 +80,7 @@ void AppDeviceCallbacks::OnOnOffPostAttributeChangeCallback(EndpointId endpointI
     VerifyOrExit(endpointId == 1, ESP_LOGE(TAG, "Unexpected EndPoint ID: `0x%02x'", endpointId));
 
     ESP_LOGI(TAG, "set onoff:%d", *value);
-    AppLED.Set(*value);
+    AppLED.SetOnoff(*value); // false - off, true - on
 
 exit:
     return;
@@ -85,13 +93,12 @@ void AppDeviceCallbacks::OnLevelControlAttributeChangeCallback(EndpointId endpoi
     VerifyOrExit(endpointId == 1, ESP_LOGE(TAG, "Unexpected EndPoint ID: `0x%02x'", endpointId));
 
     ESP_LOGI(TAG, "set level:%d", *value);
-    AppLED.SetBrightness(*value);
+    AppLED.SetLevel(*value); // 0 - 254
 
 exit:
     return;
 }
 
-// Currently ColorControl cluster is supported for ESP32C3_DEVKITM and ESP32S3_DEVKITM which have an on-board RGB-LED
 void AppDeviceCallbacks::OnColorControlAttributeChangeCallback(EndpointId endpointId, AttributeId attributeId, uint8_t * value)
 {
     using namespace ColorControl::Attributes;
@@ -104,12 +111,12 @@ void AppDeviceCallbacks::OnColorControlAttributeChangeCallback(EndpointId endpoi
 
     if (attributeId == CurrentHue::Id)
     {
-        hue = *value;
+        hue = *value; // 0 - 254
         CurrentSaturation::Get(endpointId, &saturation);
     }
     else
     {
-        saturation = *value;
+        saturation = *value; // 0 - 254
         CurrentHue::Get(endpointId, &hue);
     }
     ESP_LOGI(TAG, "set hue:%d, saturation:%d", hue, saturation);
@@ -135,18 +142,54 @@ exit:
  */
 void emberAfOnOffClusterInitCallback(EndpointId endpoint)
 {
-    ESP_LOGI(TAG, "emberAfOnOffClusterInitCallback");
-    GetAppTask().UpdateClusterState();
+    bool onoff = false;
+
+    ESP_LOGI(TAG, "emberAfOnOffClusterInitCallback, ep:%d", endpoint);
+
+    if (1 == endpoint) {
+        if (Protocols::InteractionModel::Status::Success == Clusters::OnOff::Attributes::OnOff::Get(1, &onoff)) {
+            AppLED.SetOnoff(onoff);
+        }
+    }
 }
+
+void emberAfLevelControlClusterInitCallback(EndpointId endpoint)
+{
+    DataModel::Nullable<uint8_t> level;
+
+    ESP_LOGI(TAG, "emberAfLevelControlClusterInitCallback, ep:%d", endpoint);
+
+    if (1 == endpoint) {
+        if (Protocols::InteractionModel::Status::Success == Clusters::LevelControl::Attributes::CurrentLevel::Get(1, level)) {
+            if (!level.IsNull()) {
+                AppLED.SetLevel(level.Value());
+            }
+        }
+    }
+}
+
+void emberAfColorControlClusterInitCallback(EndpointId endpoint)
+{
+    uint8_t hue = 0, saturation = 0;
+
+    ESP_LOGI(TAG, "emberAfColorControlClusterInitCallback, ep:%d", endpoint);
+    Protocols::InteractionModel::Status status = Protocols::InteractionModel::Status::Success;
+
+    if (1 == endpoint) {
+        if (Protocols::InteractionModel::Status::Success == Clusters::ColorControl::Attributes::CurrentHue::Get(1, &hue) &&
+            Protocols::InteractionModel::Status::Success == Clusters::ColorControl::Attributes::CurrentSaturation::Get(1, &saturation)) {
+            AppLED.SetColor(hue, saturation);
+        }
+    }
+}
+
 
 void AppDeviceCallbacksDelegate::OnIPv4ConnectivityEstablished()
 {
     ESP_LOGI(TAG, "OnIPv4ConnectivityEstablished");
-    // wifiLED.Set(true);
 }
 
 void AppDeviceCallbacksDelegate::OnIPv4ConnectivityLost()
 {
     ESP_LOGI(TAG, "OnIPv4ConnectivityLost");
-    // wifiLED.Set(false);
 }

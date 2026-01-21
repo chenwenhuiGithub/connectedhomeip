@@ -16,91 +16,128 @@
  */
 
 #include "LEDWidget.h"
-#include "led_strip.h"
+#include "ColorFormat.h"
+
+#include <app/util/attribute-storage.h>
+#include <platform/KeyValueStoreManager.h>
+#include <lib/support/CodeUtils.h>
+#include <platform/CHIPDeviceLayer.h>
+
+using namespace chip;
+using namespace chip::DeviceLayer;
 
 static const char TAG[] = "LED";
 
 void LEDWidget::Init(void)
 {
-    mState      = false;
-    mBrightness = UINT8_MAX;
+    mOnoff      = false;
+    mLevel      = 0;
+    mHue        = 0;
+    mSaturation = 0;
 
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode      = LEDC_LOW_SPEED_MODE, // timer mode
-        .duty_resolution = LEDC_TIMER_8_BIT,    // resolution of PWM duty
-        .timer_num       = LEDC_TIMER_1,        // timer index
-        .freq_hz         = 5000,                // frequency of PWM signal
-        .clk_cfg         = LEDC_AUTO_CLK,       // Auto select the source clock
+    ledc_timer_config_t ledc_timer_cfg = {
+        .speed_mode             = CONFIG_LEDC_MODE,
+        .duty_resolution        = CONFIG_LEDC_DUTY_RES,
+        .timer_num              = LEDC_TIMER_0,
+        .freq_hz                = CONFIG_LEDC_FREQ,
+        .clk_cfg                = LEDC_AUTO_CLK
     };
-    ledc_channel_config_t ledc_channel = {
-        .gpio_num   = CONFIG_LED_GPIO_NUM,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel    = LEDC_CHANNEL_0,
-        .intr_type  = LEDC_INTR_DISABLE,
-        .timer_sel  = LEDC_TIMER_1,
-        .duty       = 0,
-        .hpoint     = 0,
+    ledc_channel_config_t ledc_channel_cfg = {
+        .gpio_num               = CONFIG_GPIO_RGB_R,
+        .speed_mode             = CONFIG_LEDC_MODE,
+        .channel                = CONFIG_CHANNEL_RGB_R,
+        .intr_type              = LEDC_INTR_DISABLE,
+        .timer_sel              = LEDC_TIMER_0,
+        .duty                   = 0,
+        .hpoint                 = 0,
+        .flags                  = {
+            .output_invert = 0
+        }
     };
 
-    ledc_timer_config(&ledc_timer);
-    ledc_channel_config(&ledc_channel);
+    ledc_timer_config(&ledc_timer_cfg);
+    ledc_channel_config(&ledc_channel_cfg);
+    ledc_channel_cfg.gpio_num = CONFIG_GPIO_RGB_G;
+    ledc_channel_cfg.channel  = CONFIG_CHANNEL_RGB_G;
+    ledc_channel_config(&ledc_channel_cfg);
+    ledc_channel_cfg.gpio_num = CONFIG_GPIO_RGB_B;
+    ledc_channel_cfg.channel  = CONFIG_CHANNEL_RGB_B;
+    ledc_channel_config(&ledc_channel_cfg);
 }
 
-void LEDWidget::Set(bool state)
+void LEDWidget::SetOnoff(bool onoff)
 {
-    ESP_LOGI(TAG, "Setting state to %d", state ? 1 : 0);
-    if (state == mState)
+    ESP_LOGI(TAG, "Setting onoff, %d -> %d", mOnoff, onoff ? 1 : 0);
+    if (onoff == mOnoff)
         return;
 
-    mState = state;
+    mOnoff = onoff;
 
     DoSet();
 }
 
 void LEDWidget::Toggle()
 {
-    ESP_LOGI(TAG, "Toggling state to %d", !mState);
-    mState = !mState;
+    ESP_LOGI(TAG, "Toggling onoff, %d -> %d", mOnoff, !mOnoff);
+    mOnoff = !mOnoff;
 
     DoSet();
 }
 
-void LEDWidget::SetBrightness(uint8_t brightness)
+void LEDWidget::SetLevel(uint8_t level)
 {
-    ESP_LOGI(TAG, "Setting brightness to %d", brightness);
-    if (brightness == mBrightness)
+    ESP_LOGI(TAG, "Setting level, %d -> %d", mLevel, level);
+    if (level == mLevel)
         return;
 
-    mBrightness = brightness;
+    mLevel = level;
+
+    DoSet();
+}
+
+void LEDWidget::SetColor(uint8_t hue, uint8_t saturation)
+{
+    ESP_LOGI(TAG, "Setting color, %d,%d -> %d,%d", mHue, mSaturation, hue, saturation);
+    if (hue == mHue && saturation == mSaturation)
+        return;
+
+    mHue        = hue;
+    mSaturation = saturation;
 
     DoSet();
 }
 
 uint8_t LEDWidget::GetLevel()
 {
-    return this->mBrightness;
+    return this->mLevel;
 }
 
-bool LEDWidget::IsTurnedOn()
+bool LEDWidget::GetOnoff()
 {
-    return this->mState;
+    return this->mOnoff;
 }
 
-void LEDWidget::SetColor(uint8_t Hue, uint8_t Saturation)
+uint8_t LEDWidget::GetColorHue()
 {
-    // if (Hue == mHue && Saturation == mSaturation)
-    //     return;
+    return this->mHue;
+}
 
-    // mHue        = Hue;
-    // mSaturation = Saturation;
-
-    // DoSet();
+uint8_t LEDWidget::GetColorSaturation()
+{
+    return this->mSaturation;
 }
 
 void LEDWidget::DoSet(void)
 {
-    uint8_t brightness = mState ? mBrightness : 0;
+    uint8_t level = mOnoff ? mLevel : 0;
 
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, UINT8_MAX - brightness);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+    HsvColor_t hsv = { mHue, mSaturation, level };
+    RgbColor_t rgb = HsvToRgb(hsv);
+
+    ledc_set_duty(CONFIG_LEDC_MODE, CONFIG_CHANNEL_RGB_R, RGB_TO_DUTY(rgb.r));
+    ledc_set_duty(CONFIG_LEDC_MODE, CONFIG_CHANNEL_RGB_G, RGB_TO_DUTY(rgb.g));
+    ledc_set_duty(CONFIG_LEDC_MODE, CONFIG_CHANNEL_RGB_B, RGB_TO_DUTY(rgb.b));
+    ledc_update_duty(CONFIG_LEDC_MODE, CONFIG_CHANNEL_RGB_R);
+    ledc_update_duty(CONFIG_LEDC_MODE, CONFIG_CHANNEL_RGB_G);
+    ledc_update_duty(CONFIG_LEDC_MODE, CONFIG_CHANNEL_RGB_B);
 }

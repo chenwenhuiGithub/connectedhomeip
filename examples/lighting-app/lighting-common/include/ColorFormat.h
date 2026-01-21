@@ -22,16 +22,16 @@
 
 struct RgbColor_t
 {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
+    uint8_t r; // 0 - 255
+    uint8_t g; // 0 - 255
+    uint8_t b; // 0 - 255
 };
 
 struct HsvColor_t
 {
-    uint8_t h;
-    uint8_t s;
-    uint8_t v;
+    uint8_t h; // 0 - 254
+    uint8_t s; // 0 - 254
+    uint8_t v; // 0 - 254
 };
 
 struct XyColor_t

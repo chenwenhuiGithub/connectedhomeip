@@ -45,13 +45,17 @@ public:
     CHIP_ERROR StartAppTask();
     static void AppTaskMain(void * pvParameter);
 
-    void ButtonEventHandler();
+    void HandleBtnPressedEvent();
+    void HandleBtnLongPressedEvent();
 
-    void UpdateClusterState();
+    void UpdateOnOffClusterState();
+    void UpdateLevelControlClusterState();
+    void UpdateColorControlClusterState();
 
 private:
     friend AppTask & GetAppTask(void);
-    static void LightingActionEventHandler(AppEvent * aEvent);
+    static void BtnPressedEventHandler(AppEvent * aEvent);
+    static void BtnLongPressedEventHandler(AppEvent * aEvent);
 
     static AppTask sAppTask;
 };

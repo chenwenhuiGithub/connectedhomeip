@@ -22,23 +22,40 @@
 #include "driver/ledc.h"
 #include "hal/ledc_types.h"
 
-#define CONFIG_LED_GPIO_NUM           21
+
+#define CONFIG_GPIO_RGB_R           12
+#define CONFIG_GPIO_RGB_G           13
+#define CONFIG_GPIO_RGB_B           14
+#define CONFIG_CHANNEL_RGB_R        LEDC_CHANNEL_1
+#define CONFIG_CHANNEL_RGB_G        LEDC_CHANNEL_2
+#define CONFIG_CHANNEL_RGB_B        LEDC_CHANNEL_3
+
+#define CONFIG_LEDC_MODE            LEDC_LOW_SPEED_MODE
+#define CONFIG_LEDC_FREQ            4000
+#define CONFIG_LEDC_DUTY_RES        LEDC_TIMER_10_BIT
+
+#define RGB_TO_DUTY(x)              ((x) * (1 << CONFIG_LEDC_DUTY_RES) / 255)
+
 
 class LEDWidget
 {
 public:
     void Init(void);
-    void Set(bool state);
     void Toggle(void);
 
-    void SetBrightness(uint8_t brightness);
-    void SetColor(uint8_t Hue, uint8_t Saturation);
+    void SetOnoff(bool onoff);
+    void SetLevel(uint8_t level);
+    void SetColor(uint8_t hue, uint8_t saturation);
+    bool GetOnoff(void);
     uint8_t GetLevel(void);
-    bool IsTurnedOn(void);
+    uint8_t GetColorHue(void);
+    uint8_t GetColorSaturation(void);
 
 private:
-    bool mState;
-    uint8_t mBrightness;
+    bool mOnoff;
+    uint8_t mLevel;
+    uint8_t mHue;
+    uint8_t mSaturation;
 
     void DoSet(void);
 };

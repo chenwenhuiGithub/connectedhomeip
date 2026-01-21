@@ -25,10 +25,10 @@ struct AppEvent
 {
     enum AppEventTypes
     {
-        kEventType_Button = 0,
+        kEventType_Btn_Pressed = 0,
+        kEventType_Btn_LongPressed,
         kEventType_Timer,
-        kEventType_Light,
-        kEventType_Install,
+        kEventType_Light
     };
 
     uint16_t Type;
